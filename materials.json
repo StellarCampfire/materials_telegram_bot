@@ -1,0 +1,10 @@
+{
+    "material1": {
+        "title": "Руководство по Python",
+        "description": "Полное руководство для начинающих по программированию на Python.",
+        "image_path" : "materials/image_python.jpg",
+        "demo_file_path": "materials/demo_python.pdf",
+        "full_file_path": "materials/full_python.pdf",
+        "price": 50000
+    }
+}
