@@ -86,10 +86,10 @@ async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     # Отправляем демо-файл по URL
     try:
         await query.message.reply_text(
-            text=f"Вот ссылка на демо-версию материала:\n{material['demo_file_link']}"
+            text=f"Вот ссылка на демо-версию материала:\n{material.demo_file_link}"
         )
     except Exception as e:
-        logger.error(f"Ошибка при отправке ссылки на демо-файл: {e}, ссылка: {material['demo_file_link']}")
+        logger.error(f"Ошибка при отправке ссылки на демо-файл: {e}, ссылка: {material.demo_file_link}")
         await query.message.reply_text("Ошибка при отправке ссылки на демо-файл.")
         return
     
@@ -101,27 +101,21 @@ async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    if material.get('img_link'):
-        try:
-            await query.edit_message_media(
-                media=InputMediaPhoto(
-                    media=material['img_link'],
-                    caption=f"{material['title']}"
-                ),
-                reply_markup=reply_markup
-            )
-        except Exception as e:
-            logger.error(f"Ошибка при редактировании сообщения с изображением: {e}, ссылка: {material['img_link']}")
-            await query.edit_message_text(
-                text=f"{material['title']}",
-                reply_markup=reply_markup
-            )
-    else:
-        await query.edit_message_text(
-            text=f"{material['title']}",
+    try:
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=material.img_link,
+                caption=f"{material.title}"
+            ),
             reply_markup=reply_markup
         )
-
+    except Exception as e:
+        logger.error(f"Ошибка при редактировании сообщения с изображением: {e}, ссылка: {material.img_link}")
+        await query.edit_message_text(
+            text=f"{material.title}",
+            reply_markup=reply_markup
+    )
+    
 async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запрос оплаты"""
     query = update.callback_query
@@ -133,21 +127,21 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         # Отправляем инвойс
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
-            title=material['title'],
-            description=material['title'],
+            title=material.title,
+            description=material.description,
             payload=id,
             provider_token=PAYMENT_PROVIDER_TOKEN,
             currency='RUB',
-            prices=[{'label': 'Цена', 'amount': material['price']}],
+            prices=[{'label': 'Цена', 'amount': material.price}],
             # Для продакшена ЮKassa требует provider_data для чека, пример:
             # provider_data={
             #     "receipt": {
             #         "items": [
             #             {
-            #                 "description": material['title'],
+            #                 "description": material.title,
             #                 "quantity": "1.00",
             #                 "amount": {
-            #                     "value": str(material['price'] / 100.0),
+            #                     "value": str(material.price / 100.0),
             #                     "currency": "RUB"
             #                 },
             #                 "vat_code": 1  # Без НДС для цифровых товаров
@@ -156,7 +150,7 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             #     }
             # }
         )
-        logger.info(f"Инвойс отправлен для {material['title']} (ID: {id}, сумма: {material['price']/100} RUB)")
+        logger.info(f"Инвойс отправлен для {material.title} (ID: {id}, сумма: {material.price/100} RUB)")
     except Exception as e:
         logger.error(f"Ошибка при отправке инвойса: {e}")
         await query.message.reply_text(f"Произошла ошибка при создании счёта: {str(e)}. Попробуйте позже.")
@@ -178,11 +172,11 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
             keyboard = [[InlineKeyboardButton("Вернуться к началу", callback_data='start')]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await update.message.reply_text(
-                text=f"Спасибо за покупку! Вот полный материал {material['title']}:\n{material['full_file_link']}",
+                text=f"Спасибо за покупку! Вот полный материал {material.title}:\n{material.full_file_link}",
                 reply_markup=reply_markup
             )
 
-            logger.info(f"Успешная оплата для {material['title']} (ключ: {id})")
+            logger.info(f"Успешная оплата для {material.title} (ID: {id})")
         except Exception as e:
             logger.error(f"Ошибка при отправке файла: {e}")
             await update.message.reply_text("Ошибка при отправке файла. Свяжитесь с поддержкой.")

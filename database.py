@@ -16,11 +16,12 @@ class Database:
                 CREATE TABLE IF NOT EXISTS materials (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
                     img_link TEXT NOT NULL,
                     demo_file_link TEXT NOT NULL,
                     full_file_link TEXT NOT NULL,
                     price INTEGER NOT NULL,
-                    is_active BOOL NOT NULL
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE
                 )
             """)
             conn.commit()
@@ -33,16 +34,16 @@ class Database:
             cursor.execute("SELECT * FROM materials WHERE id = ? AND is_active = true", (material_id,))
             row = cursor.fetchone()
             if row:
-                return Material(row["id"], row["title"], row["img_link"], row["demo_file_link"], row["full_file_link"], row["price"])
+                return Material(row["id"], row["title"], row["description"], row["img_link"], row["demo_file_link"], row["full_file_link"], row["price"])
             return None
 
-    def get_all_materials(self) -> List[Dict]:
+    def get_all_materials(self) -> List[Material]:
         """Получение всех материалов"""
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM materials")
+            cursor.execute("SELECT * FROM materials WHERE is_active = true")
             rows = cursor.fetchall()
             return [
-                Material(row["id"], row["title"], row["img_link"], row["demo_file_link"], row["full_file_link"], row["price"])
+                Material(row["id"], row["title"], row["description"], row["img_link"], row["demo_file_link"], row["full_file_link"], row["price"])
             for row in rows]

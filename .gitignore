@@ -1,6 +1,6 @@
-materials/
 .env
 *.sql
 *.db
 *.db-journal
 __pycache__/
+venv/
