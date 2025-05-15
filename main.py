@@ -1,9 +1,10 @@
 import logging
-import json
 import os
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, InputMediaPhoto
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, PreCheckoutQueryHandler, MessageHandler, ContextTypes
+from database import Database
+from material import Material
 
 # Загрузка переменных из .env
 load_dotenv()
@@ -21,22 +22,15 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Загрузка материалов из JSON
-with open('materials.json', 'r', encoding='utf-8') as f:
-    _data = json.load(f)
-
-
-def get_material_by_index(index):
-    return _data["materials"][int(index)]
-
-def get_all_materials():
-    return _data["materials"]
+db = Database()
 
 async def send_start_msg(telegramObject, reply_markup):
     await telegramObject.message.reply_text('Привет! Выбери материал:', reply_markup=reply_markup)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Команда /start - показывает список материалов"""
-    keyboard = [[InlineKeyboardButton(material['title'], callback_data=index)] for index, material in enumerate(get_all_materials())]
+    keyboard = [[InlineKeyboardButton(material.title, callback_data=str(material.id))] 
+        for material in db.get_all_materials()]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if update.message:
         # Обрабатываем команду /start
@@ -49,73 +43,44 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def handle_start_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await start(update, context)
-    # Обработка нажатия на кнопку 'Вернуться к началу'
-    # query = update.callback_query
-    # await query.answer()
-    # keyboard = [[InlineKeyboardButton(material['title'], callback_data=index)] for index, material in enumerate(get_all_materials())]
-    # reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    # try:
-    #     # Пробуем отредактировать как текстовое сообщение
-    #     await query.edit_message_text(
-    #         text='Привет! Выбери материал:',
-    #         reply_markup=reply_markup
-    #     )
-    # except Exception as e:
-    #     logger.warning(f"Не удалось отредактировать сообщение: {e}")
-    #     try:
-    #         # Отправляем новое сообщение, не удаляя старое
-    #         await context.bot.send_message(
-    #             chat_id=query.message.chat_id,
-    #             text='Привет! Выбери материал:',
-    #             reply_markup=reply_markup
-    #         )
-    #     except Exception as e2:
-    #         logger.error(f"Ошибка при отправке нового сообщения: {e2}")
-    #         await query.message.reply_text("Ошибка при возврате к началу. Попробуйте /start.")
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработка нажатия на кнопку материала"""
     logger.info("Функция обработки кнопки")
     query = update.callback_query
-    index = query.data
-    material = get_material_by_index(index)
+    id = int(query.data)
+    material = db.get_material_by_id(id)
     
     # Создаём кнопки
     keyboard = [
-        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{index}')],
-        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{index}')],
+        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{id}')],
+        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{id}')],
         [InlineKeyboardButton("Вернуться к началу", callback_data='start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.answer()
-    if material.get('img_link'):
-        try:
-            await query.edit_message_media(
-                media=InputMediaPhoto(
-                    media=material['img_link'],
-                    caption=f"{material['title']}"
-                ),
-                reply_markup=reply_markup
-            )
-        except Exception as e:
-            logger.error(f"Ошибка при редактировании сообщения с изображением: {e}")
-            await query.edit_message_text(
-                text=f"{material['title']}",
-                reply_markup=reply_markup
-            )
-    else:
-        await query.edit_message_text(
-            text=f"{material['title']}",
+    try:
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=material.img_link,
+                caption=f"{material.title}"
+            ),
             reply_markup=reply_markup
         )
+    except Exception as e:
+        logger.error(f"Ошибка при редактировании сообщения с изображением: {e}")
+        await query.edit_message_text(
+            text=f"{material.title}",
+            reply_markup=reply_markup
+        )
+
 
 async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправка демо-файла"""
     query = update.callback_query
-    index = int(query.data.split('_')[1])
-    material = get_material_by_index(index)
+    id = int(query.data.split('_')[1])
+    material = db.get_material_by_id(id)
     
     await query.answer()
     # Отправляем демо-файл по URL
@@ -130,8 +95,8 @@ async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     
     # Обновляем сообщение с кнопками
     keyboard = [
-        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{index}')],
-        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{index}')],
+        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{id}')],
+        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{id}')],
         [InlineKeyboardButton("Вернуться к началу", callback_data='start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -160,9 +125,8 @@ async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запрос оплаты"""
     query = update.callback_query
-    index = int(query.data.split('_')[1])
-    
-    material = get_material_by_index(index)
+    id = int(query.data.split('_')[1])
+    material = db.get_material_by_id(id)
     
     await query.answer()
     try:
@@ -171,7 +135,7 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             chat_id=query.message.chat_id,
             title=material['title'],
             description=material['title'],
-            payload=index,
+            payload=id,
             provider_token=PAYMENT_PROVIDER_TOKEN,
             currency='RUB',
             prices=[{'label': 'Цена', 'amount': material['price']}],
@@ -192,7 +156,7 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             #     }
             # }
         )
-        logger.info(f"Инвойс отправлен для {material['title']} (ключ: {index}, сумма: {material['price']/100} RUB)")
+        logger.info(f"Инвойс отправлен для {material['title']} (ID: {id}, сумма: {material['price']/100} RUB)")
     except Exception as e:
         logger.error(f"Ошибка при отправке инвойса: {e}")
         await query.message.reply_text(f"Произошла ошибка при создании счёта: {str(e)}. Попробуйте позже.")
@@ -207,8 +171,8 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     """Обработка успешной оплаты"""
     if update.message.successful_payment:
         payment = update.message.successful_payment
-        index = payment.invoice_payload
-        material = get_material_by_index(index)
+        id = int(payment.invoice_payload)
+        material = db.get_material_by_id(id)
         
         try:
             keyboard = [[InlineKeyboardButton("Вернуться к началу", callback_data='start')]]
@@ -218,7 +182,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                 reply_markup=reply_markup
             )
 
-            logger.info(f"Успешная оплата для {material['title']} (ключ: {index})")
+            logger.info(f"Успешная оплата для {material['title']} (ключ: {id})")
         except Exception as e:
             logger.error(f"Ошибка при отправке файла: {e}")
             await update.message.reply_text("Ошибка при отправке файла. Свяжитесь с поддержкой.")
