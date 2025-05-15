@@ -22,127 +22,147 @@ logger = logging.getLogger(__name__)
 
 # Загрузка материалов из JSON
 with open('materials.json', 'r', encoding='utf-8') as f:
-    MATERIALS = json.load(f)
+    _data = json.load(f)
+
+
+def get_material_by_index(index):
+    return _data["materials"][int(index)]
+
+def get_all_materials():
+    return _data["materials"]
+
+async def send_start_msg(telegramObject, reply_markup):
+    await telegramObject.message.reply_text('Привет! Выбери материал:', reply_markup=reply_markup)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Команда /start - показывает список материалов"""
-    keyboard = [[InlineKeyboardButton(MATERIALS[key]['title'], callback_data=key)] for key in MATERIALS.keys()]
+    keyboard = [[InlineKeyboardButton(material['title'], callback_data=index)] for index, material in enumerate(get_all_materials())]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Привет! Выбери материал:', reply_markup=reply_markup)
+    if update.message:
+        # Обрабатываем команду /start
+        await send_start_msg(update, reply_markup)
+    elif update.callback_query:
+        # Обрабатываем нажатие кнопки
+        query = update.callback_query
+        await query.answer()
+        await send_start_msg(query, reply_markup)
+
+async def handle_start_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await start(update, context)
+    # Обработка нажатия на кнопку 'Вернуться к началу'
+    # query = update.callback_query
+    # await query.answer()
+    # keyboard = [[InlineKeyboardButton(material['title'], callback_data=index)] for index, material in enumerate(get_all_materials())]
+    # reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # try:
+    #     # Пробуем отредактировать как текстовое сообщение
+    #     await query.edit_message_text(
+    #         text='Привет! Выбери материал:',
+    #         reply_markup=reply_markup
+    #     )
+    # except Exception as e:
+    #     logger.warning(f"Не удалось отредактировать сообщение: {e}")
+    #     try:
+    #         # Отправляем новое сообщение, не удаляя старое
+    #         await context.bot.send_message(
+    #             chat_id=query.message.chat_id,
+    #             text='Привет! Выбери материал:',
+    #             reply_markup=reply_markup
+    #         )
+    #     except Exception as e2:
+    #         logger.error(f"Ошибка при отправке нового сообщения: {e2}")
+    #         await query.message.reply_text("Ошибка при возврате к началу. Попробуйте /start.")
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработка нажатия на кнопку материала"""
     logger.info("Функция обработки кнопки")
     query = update.callback_query
-    material_key = query.data
-    
-    # Проверяем, что ключ существует в MATERIALS
-    if material_key not in MATERIALS:
-        await query.answer(text="Ошибка: материал не найден.")
-        logger.error(f"Неверный material_key: {material_key}")
-        return
-    
-    material = MATERIALS[material_key]
+    index = query.data
+    material = get_material_by_index(index)
     
     # Создаём кнопки
     keyboard = [
-        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{material_key}')],
-        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{material_key}')],
+        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{index}')],
+        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{index}')],
         [InlineKeyboardButton("Вернуться к началу", callback_data='start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await query.answer()
-    if material.get('image_path') and os.path.exists(material['image_path']):
+    if material.get('img_link'):
         try:
-            with open(material['image_path'], 'rb') as image_file:
-                await query.edit_message_media(
-                    media=InputMediaPhoto(
-                        media=image_file,
-                        caption=f"{material['title']}\n\n{material['description']}"
-                    ),
-                    reply_markup=reply_markup
-                )
+            await query.edit_message_media(
+                media=InputMediaPhoto(
+                    media=material['img_link'],
+                    caption=f"{material['title']}"
+                ),
+                reply_markup=reply_markup
+            )
         except Exception as e:
             logger.error(f"Ошибка при редактировании сообщения с изображением: {e}")
             await query.edit_message_text(
-                text=f"{material['title']}\n\n{material['description']}",
+                text=f"{material['title']}",
                 reply_markup=reply_markup
             )
     else:
         await query.edit_message_text(
-            text=f"{material['title']}\n\n{material['description']}",
+            text=f"{material['title']}",
             reply_markup=reply_markup
         )
 
 async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Отправка демо-файла"""
     query = update.callback_query
-    logger.info(f"Ключ материала до сплита: {query.data}")
-    material_key = query.data.split('_')[1]
-    logger.info(f"Ключ материала после сплита: {material_key}")
-    
-    # Проверяем, что ключ существует
-    if material_key not in MATERIALS:
-        await query.answer(text="Ошибка: материал не найден.")
-        logger.error(f"Неверный material_key: {material_key}")
-        return
-    
-    material = MATERIALS[material_key]
+    index = int(query.data.split('_')[1])
+    material = get_material_by_index(index)
     
     await query.answer()
-    # Отправляем демо-файл
+    # Отправляем демо-файл по URL
     try:
-        with open(material['demo_file_path'], 'rb') as demo_file:
-            await context.bot.send_document(chat_id=query.message.chat_id, document=demo_file,
-                                           caption="Вот демо-версия материала!")
+        await query.message.reply_text(
+            text=f"Вот ссылка на демо-версию материала:\n{material['demo_file_link']}"
+        )
     except Exception as e:
-        logger.error(f"Ошибка при отправке демо-файла: {e}")
-        await query.message.reply_text("Ошибка при отправке демо-файла.")
+        logger.error(f"Ошибка при отправке ссылки на демо-файл: {e}, ссылка: {material['demo_file_link']}")
+        await query.message.reply_text("Ошибка при отправке ссылки на демо-файл.")
         return
     
     # Обновляем сообщение с кнопками
     keyboard = [
-        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{material_key}')],
-        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{material_key}')],
+        [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{index}')],
+        [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{index}')],
         [InlineKeyboardButton("Вернуться к началу", callback_data='start')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    if material.get('image_path') and os.path.exists(material['image_path']):
+    if material.get('img_link'):
         try:
-            with open(material['image_path'], 'rb') as image_file:
-                await query.edit_message_media(
-                    media=InputMediaPhoto(
-                        media=image_file,
-                        caption=f"{material['title']}\n\n{material['description']}"
-                    ),
-                    reply_markup=reply_markup
-                )
+            await query.edit_message_media(
+                media=InputMediaPhoto(
+                    media=material['img_link'],
+                    caption=f"{material['title']}"
+                ),
+                reply_markup=reply_markup
+            )
         except Exception as e:
-            logger.error(f"Ошибка при редактировании сообщения с изображением: {e}")
+            logger.error(f"Ошибка при редактировании сообщения с изображением: {e}, ссылка: {material['img_link']}")
             await query.edit_message_text(
-                text=f"{material['title']}\n\n{material['description']}",
+                text=f"{material['title']}",
                 reply_markup=reply_markup
             )
     else:
         await query.edit_message_text(
-            text=f"{material['title']}\n\n{material['description']}",
+            text=f"{material['title']}",
             reply_markup=reply_markup
         )
 
 async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Запрос оплаты"""
     query = update.callback_query
-    material_key = query.data.split('_')[1]
+    index = int(query.data.split('_')[1])
     
-    # Проверяем, что ключ существует
-    if material_key not in MATERIALS:
-        await query.answer(text="Ошибка: материал не найден.")
-        logger.error(f"Неверный material_key: {material_key}")
-        return
-    
-    material = MATERIALS[material_key]
+    material = get_material_by_index(index)
     
     await query.answer()
     try:
@@ -150,8 +170,8 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title=material['title'],
-            description=material['description'],
-            payload=material_key,
+            description=material['title'],
+            payload=index,
             provider_token=PAYMENT_PROVIDER_TOKEN,
             currency='RUB',
             prices=[{'label': 'Цена', 'amount': material['price']}],
@@ -172,7 +192,7 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             #     }
             # }
         )
-        logger.info(f"Инвойс отправлен для {material['title']} (ключ: {material_key}, сумма: {material['price']/100} RUB)")
+        logger.info(f"Инвойс отправлен для {material['title']} (ключ: {index}, сумма: {material['price']/100} RUB)")
     except Exception as e:
         logger.error(f"Ошибка при отправке инвойса: {e}")
         await query.message.reply_text(f"Произошла ошибка при создании счёта: {str(e)}. Попробуйте позже.")
@@ -187,56 +207,22 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
     """Обработка успешной оплаты"""
     if update.message.successful_payment:
         payment = update.message.successful_payment
-        material_key = payment.invoice_payload
-        
-        # Проверяем, что ключ существует
-        if material_key not in MATERIALS:
-            logger.error(f"Неверный material_key в payload: {material_key}")
-            await update.message.reply_text("Ошибка: материал не найден.")
-            return
-        
-        material = MATERIALS[material_key]
+        index = payment.invoice_payload
+        material = get_material_by_index(index)
         
         try:
-            with open(material['full_file_path'], 'rb') as full_file:
-                # Создаём кнопку "Вернуться к началу"
-                keyboard = [[InlineKeyboardButton("Вернуться к началу", callback_data='start')]]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-                await update.message.reply_document(
-                    document=full_file,
-                    caption=f"Спасибо за покупку! Вот полный материал: {material['title']}",
-                    reply_markup=reply_markup
-                )
-            logger.info(f"Успешная оплата для {material['title']} (ключ: {material_key})")
+            keyboard = [[InlineKeyboardButton("Вернуться к началу", callback_data='start')]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                text=f"Спасибо за покупку! Вот полный материал {material['title']}:\n{material['full_file_link']}",
+                reply_markup=reply_markup
+            )
+
+            logger.info(f"Успешная оплата для {material['title']} (ключ: {index})")
         except Exception as e:
             logger.error(f"Ошибка при отправке файла: {e}")
             await update.message.reply_text("Ошибка при отправке файла. Свяжитесь с поддержкой.")
 
-async def handle_start_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка нажатия на кнопку 'Вернуться к началу'"""
-    query = update.callback_query
-    await query.answer()
-    keyboard = [[InlineKeyboardButton(MATERIALS[key]['title'], callback_data=key)] for key in MATERIALS.keys()]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    try:
-        # Пробуем отредактировать как текстовое сообщение
-        await query.edit_message_text(
-            text='Привет! Выбери материал:',
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        logger.warning(f"Не удалось отредактировать сообщение: {e}")
-        try:
-            # Отправляем новое сообщение, не удаляя старое
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text='Привет! Выбери материал:',
-                reply_markup=reply_markup
-            )
-        except Exception as e2:
-            logger.error(f"Ошибка при отправке нового сообщения: {e2}")
-            await query.message.reply_text("Ошибка при возврате к началу. Попробуйте /start.")
 
 def main() -> None:
     """Запуск бота"""
