@@ -2,7 +2,7 @@ class Material:
     def __init__ (self, id, title, description, img_link, demo_file_link, full_file_link, price):
         self.id = id
         self.title = title
-        if description is not '':
+        if description != '':
             self.description = description
         else:
             self.description = '-'

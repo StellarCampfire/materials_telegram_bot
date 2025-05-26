@@ -1,0 +1,9 @@
+services:
+  bot:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./materials.db:/app/materials.db
+      - ./bot.log:/app/bot.log
+    restart: unless-stopped
