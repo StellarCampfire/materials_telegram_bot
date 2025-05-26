@@ -2,22 +2,20 @@ import logging
 import os
 from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, InputMediaPhoto
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, PreCheckoutQueryHandler, MessageHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, PreCheckoutQueryHandler, MessageHandler, ContextTypes, filters
 from logging.handlers import RotatingFileHandler
 from database import Database
 
-# Загрузка переменных из .env
+# Loading variables from .env
 load_dotenv()
-
-# Получение токенов из переменных окружения
 TOKEN = os.getenv('TOKEN')
 PAYMENT_PROVIDER_TOKEN = os.getenv('PAYMENT_PROVIDER_TOKEN')
 
-# Проверка токена
+# Token check
 if not PAYMENT_PROVIDER_TOKEN:
     raise ValueError("PAYMENT_PROVIDER_TOKEN не указан в .env")
 
-# Настройка логирования
+# Configure logging 
 log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 log_handler = RotatingFileHandler('bot.log', maxBytes=5*1024*1024, backupCount=5)  # 5MB per file, keep 5 backups
 log_handler.setFormatter(log_formatter)
@@ -27,43 +25,53 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 logger.addHandler(log_handler)
 
-# Также сохраняем логи в консоль с UTF-8
+# Show logs in console in utf-8
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(log_formatter)
 console_handler.setLevel(logging.INFO)
-console_handler.stream.reconfigure(encoding='utf-8')  # Устанавливаем UTF-8 для консоли
+console_handler.stream.reconfigure(encoding='utf-8')
 logger.addHandler(console_handler)
 
-# Загрузка материалов из JSON
+# Databse connecting
 db = Database()
 
+# Sending start message an material list
 async def send_start_msg(telegramObject, reply_markup):
-    await telegramObject.message.reply_text('Привет! Выбери материал:', reply_markup=reply_markup)
+    username = telegramObject.from_user.username
 
+    start_message = (
+        f"🔹 Привет, {username}! 🔹\n\n"
+        "Ищешь материалы по 1С, чтобы быстрее разобраться, учиться или работать продуктивнее? 📚✨\n\n"
+        "У меня для тебя — подборка лучших материалов:\n"
+        "✅ Актуально\n"
+        "✅ Проверено\n"
+        "✅ Удобно и понятно\n\n"
+        "💡 Выбирай нужный материал, смотри демо-версию и получай полный доступ — всё просто!\n\n"
+        "👇 Нажми кнопку ниже и начни прямо сейчас!"
+    )
+
+    await telegramObject.message.reply_text(start_message, reply_markup=reply_markup)
+
+# Form and sending materials list
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Команда /start - показывает список материалов"""
     keyboard = [[InlineKeyboardButton(material.title, callback_data=str(material.id))] 
         for material in db.get_all_materials()]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if update.message:
-        # Обрабатываем команду /start
         await send_start_msg(update, reply_markup)
     elif update.callback_query:
-        # Обрабатываем нажатие кнопки
         query = update.callback_query
         await query.answer()
         await send_start_msg(query, reply_markup)
 
-async def handle_start_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await start(update, context)
 
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка нажатия на кнопку материала"""
+# Handle press on material button
+async def handle_material_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     id = int(query.data)
     material = db.get_material_by_id(id)
     
-    # Создаём кнопки
+    # Creating buttons
     keyboard = [
         [InlineKeyboardButton("Скачать демо", callback_data=f'demo_{id}')],
         [InlineKeyboardButton("Купить полный материал", callback_data=f'buy_{id}')],
@@ -77,32 +85,35 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     await query.answer()
     try:
-        # Отправляем новое сообщение с фото, текстом и кнопками
+        # sending material description and image message
         await context.bot.send_photo(
             chat_id=query.message.chat_id,
             photo=material.img_link,
-            caption=caption[:1024],  # Обрезаем до лимита Telegram
+            caption=caption[:1024],  # telegram symbols in message limit
             reply_markup=reply_markup
         )
     except Exception as e:
-        logger.error(f"Ошибка при отправке изображения: {e}")
-        # В случае ошибки отправляем только текст с заголовком и описанием
+        logger.error(f"Error while image sending: {e}")
+        # Sendign only description text
         await context.bot.send_message(
             chat_id=query.message.chat_id,
-            text=caption[:4096],  # Обрезаем до лимита текстового сообщения
+            text=caption[:4096],  # telegram symbols in message limit
             reply_markup=reply_markup
         )
+    
 
+
+async def handle_start_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await start(update, context)
 
 async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Отправка демо-файла"""
     query = update.callback_query
     id = int(query.data.split('_')[1])
     material = db.get_material_by_id(id)
     username = query.from_user.username or query.from_user.first_name or str(query.from_user.id)
     
     await query.answer()
-    # Отправляем демо-файл по URL
+    # sending demo file url
     try:
         await query.message.reply_text(
             text=f"Вот ссылка на демо-версию материала:\n{material.demo_file_link}"
@@ -113,8 +124,8 @@ async def handle_demo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await query.message.reply_text("Ошибка при отправке ссылки на демо-файл.")
         return
 
+# Forming Payment Request
 async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Запрос оплаты"""
     query = update.callback_query
     materialId = int(query.data.split('_')[1])
     material = db.get_material_by_id(materialId)
@@ -122,7 +133,7 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     
     await query.answer()
     try:
-        # Отправляем инвойс
+        # sending invoice
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title=material.title,
@@ -153,52 +164,13 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         logger.error(f"Error sending invoice to {username} for {material.title} (ID: {material.id}): {e}")
         await query.message.reply_text(f"Произошла ошибка при создании счёта: {str(e)}. Попробуйте позже.")
 
-# async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-#     """Запрос оплаты"""
-#     query = update.callback_query
-#     id = int(query.data.split('_')[1])
-#     material = db.get_material_by_id(id)
-    
-#     await query.answer()
-#     try:
-#         # Отправляем инвойс
-#         await context.bot.send_invoice(
-#             chat_id=query.message.chat_id,
-#             title=material.title,
-#             description=material.description,
-#             payload=id,
-#             provider_token=PAYMENT_PROVIDER_TOKEN,
-#             currency='RUB',
-#             prices=[{'label': 'Цена', 'amount': material.price}],
-#             # Для продакшена ЮKassa требует provider_data для чека, пример:
-#             # provider_data={
-#             #     "receipt": {
-#             #         "items": [
-#             #             {
-#             #                 "description": material.title,
-#             #                 "quantity": "1.00",
-#             #                 "amount": {
-#             #                     "value": str(material.price / 100.0),
-#             #                     "currency": "RUB"
-#             #                 },
-#             #                 "vat_code": 1  # Без НДС для цифровых товаров
-#             #             }
-#             #         ]
-#             #     }
-#             # }
-#         )
-#         logger.info(f"Invoice sent fro {material.title} matherial ID: {id}, summ: {material.price/100} RUB)")
-#     except Exception as e:
-#         logger.error(f"Error while sending invoice: {e}")
-#         await query.message.reply_text(f"Произошла ошибка при создании счёта: {str(e)}. Попробуйте позже.")
-
+# Check before payment
 async def precheckout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Проверка перед оплатой"""
     query = update.pre_checkout_query
     await query.answer(ok=True)
 
+# Handle successfull payment
 async def successful_payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Обработка успешной оплаты"""
     if update.message.successful_payment:        
         try:
             payment = update.message.successful_payment
@@ -224,27 +196,27 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
             await update.message.reply_text("Ошибка при отправке файла. Свяжитесь с поддержкой.")
 
 
+
+# Bot start
 def main() -> None:
-    """Запуск бота"""
     if not TOKEN:
         raise ValueError("TOKEN не указан в .env")
     
     logger.info("Bot is starting...")
-    
     application = Application.builder().token(TOKEN).build()
 
-    # Обработчики команд и событий
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button, pattern=r'^(?!start$|demo_|buy_)[\w]+$'))
+    application.add_handler(CallbackQueryHandler(handle_material_button, pattern=r'^(?!start$|demo_|buy_)[\w]+$'))
     application.add_handler(CallbackQueryHandler(handle_demo, pattern=r'^demo_'))
     application.add_handler(CallbackQueryHandler(handle_buy, pattern=r'^buy_'))
     application.add_handler(CallbackQueryHandler(handle_start_button, pattern=r'^start$'))
     application.add_handler(PreCheckoutQueryHandler(precheckout_handler))
     application.add_handler(MessageHandler(None, successful_payment_handler))
 
-    # Запуск polling
-    application.run_polling()
     logger.info("Bot started")
+    
+    application.run_polling()
+    logger.info("Bot stopped")
 
 if __name__ == '__main__':
     main()
