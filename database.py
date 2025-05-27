@@ -2,8 +2,10 @@ import sqlite3
 from typing import List, Dict, Optional
 from material import Material
 
+DB_FILE = "/app/data/materials.db"
+
 class Database:
-    def __init__(self, db_path: str = "materials.db"):
+    def __init__(self, db_path: str = DB_FILE):
         """Инициализация подключения к базе данных"""
         self.db_path = db_path
         self._create_table()

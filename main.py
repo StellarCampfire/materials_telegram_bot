@@ -16,8 +16,9 @@ if not PAYMENT_PROVIDER_TOKEN:
     raise ValueError("PAYMENT_PROVIDER_TOKEN не указан в .env")
 
 # Configure logging 
+LOG_FILE = "/app/data/bot.log"
 log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-log_handler = RotatingFileHandler('bot.log', maxBytes=5*1024*1024, backupCount=5)  # 5MB per file, keep 5 backups
+log_handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=5)  # 5MB per file, keep 5 backups
 log_handler.setFormatter(log_formatter)
 log_handler.setLevel(logging.INFO)
 

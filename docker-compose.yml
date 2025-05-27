@@ -4,6 +4,5 @@ services:
     env_file:
       - .env
     volumes:
-      - ./materials.db:/app/materials.db
-      - ./bot.log:/app/bot.log
+      - ./data:/app/data
     restart: unless-stopped
