@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
 
-RUN touch bot.log materials.db && \
-    chmod 644 bot.log materials.db
+RUN chmod +x entrypoint.sh
 
-CMD ["python", "main.py"]
+ENTRYPOINT ["./entrypoint.sh"]
