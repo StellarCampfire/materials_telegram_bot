@@ -37,11 +37,9 @@ logger.addHandler(console_handler)
 db = Database()
 
 # Sending start message an material list
-async def send_start_msg(telegramObject, reply_markup):
-    username = telegramObject.from_user.username
-
+async def send_start_msg(message, reply_markup):
     start_message = (
-        f"🔹 Привет, {username}! 🔹\n\n"
+        f"🔹 Привет, {message.chat.first_name}! 🔹\n\n"
         "Ищешь материалы по 1С, чтобы быстрее разобраться, учиться или работать продуктивнее? 📚✨\n\n"
         "У меня для тебя — подборка лучших материалов:\n"
         "✅ Актуально\n"
@@ -51,19 +49,20 @@ async def send_start_msg(telegramObject, reply_markup):
         "👇 Нажми кнопку ниже и начни прямо сейчас!"
     )
 
-    await telegramObject.message.reply_text(start_message, reply_markup=reply_markup)
+    await message.reply_text(start_message, reply_markup=reply_markup)
 
 # Form and sending materials list
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     keyboard = [[InlineKeyboardButton(material.title, callback_data=str(material.id))] 
         for material in db.get_all_materials()]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     if update.message:
-        await send_start_msg(update, reply_markup)
+        await send_start_msg(update.message, reply_markup)
     elif update.callback_query:
         query = update.callback_query
         await query.answer()
-        await send_start_msg(query, reply_markup)
+        await send_start_msg(query.message, reply_markup)
 
 
 # Handle press on material button
