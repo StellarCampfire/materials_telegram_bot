@@ -2,7 +2,8 @@ import sqlite3
 from typing import List, Dict, Optional
 from material import Material
 
-DB_FILE = "/app/data/materials.db"
+# DB_FILE = "/app/data/materials.db"
+DB_FILE = "./materials.db"
 
 class Database:
     def __init__(self, db_path: str = DB_FILE):

@@ -144,21 +144,23 @@ async def handle_buy(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             currency='RUB',
             prices=[{'label': 'Цена', 'amount': material.price}],
             # Для продакшена ЮKassa требует provider_data для чека, пример:
-            # provider_data={
-            #     "receipt": {
-            #         "items": [
-            #             {
-            #                 "description": material.title,
-            #                 "quantity": "1.00",
-            #                 "amount": {
-            #                     "value": str(material.price / 100.0),
-            #                     "currency": "RUB"
-            #                 },
-            #                 "vat_code": 1  # Без НДС для цифровых товаров
-            #             }
-            #         ]
-            #     }
-            # }
+            need_email = True,
+            send_email_to_provider = True,
+            provider_data = {
+                "receipt": {
+                    "items": [
+                        {
+                            "description": material.title,
+                            "quantity": "1.00",
+                            "amount": {
+                                "value": str(material.price / 100.0),
+                                "currency": "RUB"
+                            },
+                            "vat_code": 1  # Без НДС для цифровых товаров
+                        }
+                    ]
+                }
+            }
         )
         logger.info(f"Invoice sent to {username} for {material.title} (ID: {material.id}, amount: {material.price/100} RUB)")
     except Exception as e:
